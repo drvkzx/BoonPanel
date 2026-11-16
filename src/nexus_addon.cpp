@@ -205,7 +205,7 @@ AddonDefinition_t g_addon_definition{};
 
 extern "C" __declspec(dllexport) AddonDefinition_t* GetAddonDef() {
     g_addon_definition = {};
-    g_addon_definition.Signature = -1;
+    g_addon_definition.Signature = static_cast<std::uint32_t>(-1);
     g_addon_definition.APIVersion = NEXUS_API_VERSION;
     g_addon_definition.Name = "BoonPanel";
     g_addon_definition.Version.Major = 0;
@@ -216,6 +216,6 @@ extern "C" __declspec(dllexport) AddonDefinition_t* GetAddonDef() {
     g_addon_definition.Description = "Movable local-player boon panel for PvE, WvW and PvP using ArcDPS events.";
     g_addon_definition.Load = &AddonLoad;
     g_addon_definition.Unload = &AddonUnload;
-    g_addon_definition.Flags = EAddonFlags::None;
+    g_addon_definition.Flags = EAddonFlags::AF_None;
     return &g_addon_definition;
 }
