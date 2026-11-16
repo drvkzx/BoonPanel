@@ -1,0 +1,40 @@
+name: Build BoonPanel
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-x64:
+    name: Windows x64 DLL
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -S . -B build -A x64
+
+      - name: Compile Release DLL
+        run: cmake --build build --config Release --parallel
+
+      - name: Create install ZIP
+        shell: pwsh
+        run: |
+          if (!(Test-Path "build/package/addons/BoonPanel.dll")) { throw "Nexus DLL was not produced" }
+          if (!(Test-Path "build/package/bin64/arcdps_BoonPanel.dll")) { throw "ArcDPS DLL copy was not produced" }
+          Compress-Archive -Path "build/package/*" -DestinationPath "BoonPanel-Windows-x64.zip" -Force
+
+      - name: Upload DLL package
+        uses: actions/upload-artifact@v4
+        with:
+          name: BoonPanel-Windows-x64
+          path: BoonPanel-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30
