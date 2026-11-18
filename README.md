@@ -19,7 +19,7 @@ Guild Wars 2/
 
 - Displays the 12 standard boons using their original Guild Wars 2 boon artwork: Aegis, Alacrity, Fury, Might, Protection, Quickness, Regeneration, Resistance, Resolution, Stability, Swiftness and Vigor.
 - Uses Nexus' texture service to download and cache the small PNG icons from the Guild Wars 2 Wiki's file redirects. The first load requires an internet connection; icons are cached by Nexus for the game session. If an icon cannot be loaded, its short text label is shown as a fallback.
-- Shows a smooth circular countdown ring around each active icon, plus a compact numeric timer below it. The ring resets when a boon is refreshed; Might and Stability retain their stack badges and show the next stack expiry.
+- Shows a smooth five-sided countdown outline around each active icon, plus a compact numeric timer below it. The pentagon outline resets when a boon is refreshed; Might and Stability retain their stack badges and show the next stack expiry.
 - Uses a transparent, draggable Nexus/ImGui window. The default layout is a compact horizontal row; all controls are available from **Nexus → Addons → BoonPanel → Configure** (icon size, icon spacing, optional category sorting, horizontal/grid layout, inactive icons, durations, stack counts and overlay visibility). Category sorting groups offensive boons first, defensive boons second, and support/utility boons last.
 - Tracks boons on the local character whether applied by you or by an ally. Expiration timestamps are shared between the Nexus and ArcDPS module instances so countdowns tick smoothly.
 - Compensates for ArcDPS delayed area events using event timestamps; it does not add an artificial display delay.
@@ -90,3 +90,12 @@ CMakeLists.txt       Dependency fetch and DLL/package build
 ## License
 
 The addon source is provided under the MIT License. Guild Wars 2 artwork is not covered by that license and remains the property of its respective rights holders.
+
+
+### Pentagon duration outline
+
+Active boon duration is shown as a smooth, boon-colored progress outline following a five-sided perimeter around the icon artwork. The subdued full pentagon remains visible as the track; the colored portion shrinks as the boon expires and resets when the boon is applied or refreshed.
+
+### Boon selection
+
+Open Nexus Addons → BoonPanel → Configure and use the **Boon selection** checkboxes to choose which boons appear in the overlay. **Select all** and **Select none** provide quick presets. All boons are enabled by default to preserve the original display. Filtering affects only the displayed tiles; ArcDPS tracking continues for every supported boon.
