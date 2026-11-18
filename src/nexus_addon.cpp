@@ -17,6 +17,7 @@ AddonAPI_t* g_api = nullptr;
 boonpanel::SharedState g_shared;
 
 bool g_visible = true;
+bool g_hide_title_bar = false;
 bool g_show_duration = true;
 bool g_show_inactive = false;
 bool g_show_stack_counts = true;
@@ -30,7 +31,6 @@ bool g_horizontal_layout = true;
 bool g_sort_by_category = false;
 float g_tile_size = 42.0f;
 float g_icon_spacing = 4.0f;
-int g_columns = 6;
 std::array<std::uint32_t, boonpanel::kBoonCount> g_ring_total_ms{};
 std::array<std::uint32_t, boonpanel::kBoonCount> g_last_remaining_ms{};
 
@@ -104,34 +104,46 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
         g_last_remaining_ms[index] = remaining_ms;
         const float fraction = (std::max)(0.0f, (std::min)(1.0f,
             static_cast<float>(remaining_ms) / static_cast<float>((std::max)(1u, g_ring_total_ms[index]))));
-        constexpr float kPi = 3.14159265358979323846f;
         constexpr int kPentagonSides = 5;
-        const float radius = tile * 0.485f;
+        // GW2 boon artwork uses a shield-like pentagon, not a regular polygon:
+        // pointed crown, sloped shoulders, tapered lower sides and a flat base.
+        // These normalized points are inset to follow the visible icon border.
+        constexpr float shape[kPentagonSides][2] = {
+            {0.50f, 0.035f}, // top point
+            {0.895f, 0.265f}, // upper-right shoulder
+            {0.815f, 0.925f}, // lower-right corner
+            {0.185f, 0.925f}, // lower-left corner
+            {0.105f, 0.265f}  // upper-left shoulder
+        };
         std::array<ImVec2, kPentagonSides> vertices{};
+        float perimeter = 0.0f;
+        std::array<float, kPentagonSides> edge_lengths{};
         for (int vertex = 0; vertex < kPentagonSides; ++vertex) {
-            const float angle = -kPi * 0.5f +
-                (2.0f * kPi * static_cast<float>(vertex) / static_cast<float>(kPentagonSides));
-            vertices[vertex] = ImVec2(center.x + std::cos(angle) * radius,
-                                      center.y + std::sin(angle) * radius);
+            vertices[vertex] = ImVec2(pos.x + tile * shape[vertex][0],
+                                      pos.y + tile * shape[vertex][1]);
+        }
+        for (int edge = 0; edge < kPentagonSides; ++edge) {
+            const ImVec2& a = vertices[edge];
+            const ImVec2& b = vertices[(edge + 1) % kPentagonSides];
+            const float dx = b.x - a.x;
+            const float dy = b.y - a.y;
+            edge_lengths[edge] = std::sqrt(dx * dx + dy * dy);
+            perimeter += edge_lengths[edge];
+            draw->AddLine(a, b, IM_COL32(0, 0, 0, 190), 2.5f);
         }
 
-        // Dim full perimeter is the track; the boon-colored segment is the
-        // remaining duration, beginning at the top point and moving clockwise.
-        for (int edge = 0; edge < kPentagonSides; ++edge) {
-            draw->AddLine(vertices[edge], vertices[(edge + 1) % kPentagonSides],
-                          IM_COL32(0, 0, 0, 190), 2.5f);
-        }
+        // Trace the remaining duration clockwise from the top. Each edge uses
+        // its own length so the progress speed stays uniform on this asymmetric shape.
         if (fraction > 0.001f) {
-            const float edge_length = 2.0f * radius * std::sin(kPi / 5.0f);
-            float distance_left = fraction * edge_length * static_cast<float>(kPentagonSides);
+            float distance_left = fraction * perimeter;
             for (int edge = 0; edge < kPentagonSides && distance_left > 0.0f; ++edge) {
                 const ImVec2 a = vertices[edge];
                 const ImVec2 b = vertices[(edge + 1) % kPentagonSides];
-                const float portion = (std::min)(1.0f, distance_left / edge_length);
+                const float portion = (std::min)(1.0f, distance_left / edge_lengths[edge]);
                 const ImVec2 end(a.x + (b.x - a.x) * portion,
                                  a.y + (b.y - a.y) * portion);
                 draw->AddLine(a, end, static_cast<ImU32>(boon.display_color), 2.5f);
-                distance_left -= edge_length;
+                distance_left -= edge_lengths[edge];
             }
         }
     } else {
@@ -190,9 +202,13 @@ void AddonRender() {
     const bool read_ok = g_shared.Read(snapshot);
     const std::uint64_t now = boonpanel::TickNowMs();
 
-    if (ImGui::Begin("Boon Panel##BoonPanel", &g_visible,
-                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse |
-                     ImGuiWindowFlags_NoBackground)) {
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_AlwaysAutoResize |
+                                    ImGuiWindowFlags_NoCollapse |
+                                    ImGuiWindowFlags_NoBackground;
+    if (g_hide_title_bar) {
+        window_flags |= ImGuiWindowFlags_NoTitleBar;
+    }
+    if (ImGui::Begin("Boon Panel##BoonPanel", &g_visible, window_flags)) {
         std::array<std::uint32_t, boonpanel::kBoonCount> remaining{};
         std::array<std::uint32_t, boonpanel::kBoonCount> stacks_now{};
         std::array<bool, boonpanel::kBoonCount> active{};
@@ -249,19 +265,22 @@ void AddonRender() {
         for (const std::size_t i : order) {
             if (!g_boon_enabled[i]) continue;
             if (!g_show_inactive && !active[i]) continue;
-            if (shown > 0) {
-                if (g_horizontal_layout) {
-                    ImGui::SameLine(0.0f, g_icon_spacing);
-                } else if ((shown % g_columns) != 0) {
-                    ImGui::SameLine(0.0f, g_icon_spacing);
-                }
+            if (shown > 0 && g_horizontal_layout) {
+                ImGui::SameLine(0.0f, g_icon_spacing);
             }
             DrawBoonTile(i, stacks_now[i], remaining[i], active[i]);
             ++shown;
-            if (!g_horizontal_layout && (shown % g_columns) == 0) ImGui::Spacing();
         }
 
-        // All user-facing controls are exposed through Nexus Configure.
+        // Right-click the panel (including over boon icons) to access the
+        // compact Style menu, matching the familiar ArcDPS window workflow.
+        if (ImGui::BeginPopupContextWindow("BoonPanelContext", 1, true)) {
+            if (ImGui::BeginMenu("Style")) {
+                ImGui::MenuItem("Hide title bar", nullptr, &g_hide_title_bar);
+                ImGui::EndMenu();
+            }
+            ImGui::EndPopup();
+        }
     }
     ImGui::End();
 }
@@ -293,13 +312,17 @@ void AddonOptions() {
 
     ImGui::Spacing();
     ImGui::TextUnformatted("Layout");
-    ImGui::Checkbox("Horizontal layout", &g_horizontal_layout);
+    ImGui::TextUnformatted("Boon arrangement");
+    if (ImGui::RadioButton("Horizontal", g_horizontal_layout)) {
+        g_horizontal_layout = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Vertical", !g_horizontal_layout)) {
+        g_horizontal_layout = false;
+    }
     ImGui::Checkbox("Sort by boon category", &g_sort_by_category);
     ImGui::SliderFloat("Icon size", &g_tile_size, 28.0f, 64.0f, "%.0f px");
     ImGui::SliderFloat("Icon spacing", &g_icon_spacing, 0.0f, 18.0f, "%.0f px");
-    if (!g_horizontal_layout) {
-        ImGui::SliderInt("Columns", &g_columns, 3, 12);
-    }
 
     ImGui::Spacing();
     ImGui::TextDisabled("The boon panel background is transparent. Countdown rings update continuously.");
